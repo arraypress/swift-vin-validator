@@ -308,8 +308,9 @@ public struct VINValidator {
     
     /// Decode the model year from the VIN.
     ///
-    /// Uses position 10 of the VIN. Years cycle every 30 years.
-    /// Position 7 helps determine which 30-year cycle.
+    /// Uses position 10 of the VIN. Year codes repeat every 30 years, and
+    /// position 7 says which cycle: numeric for 1980-2009, alphabetic for
+    /// 2010-2039 (49 CFR 565).
     ///
     /// - Parameter vin: The complete VIN
     /// - Returns: The model year, or nil if cannot decode
@@ -321,22 +322,22 @@ public struct VINValidator {
         
         guard let years = yearCodes[yearChar] else { return nil }
         
-        // Use position 7 to determine which 30-year cycle
-        // If position 7 is numeric, it's 2010+ for most manufacturers
-        if pos7.isNumber {
-            return years[1]  // 2010-2039 cycle
-        } else {
-            // For older vehicles or when position 7 is a letter
-            // This is simplified - real implementation would check manufacturer
-            let currentYear = Calendar.current.component(.year, from: Date())
-            
-            // If the earlier year would make the car more than 40 years old, use the later year
-            if currentYear - years[0] > 40 {
-                return years[1]
-            } else {
-                return years[0]
-            }
-        }
+        // 49 CFR 565: position 7 is NUMERIC for model years 1980-2009 and
+        // ALPHABETIC for 2010-2039. That is the whole rule, and it is what
+        // disambiguates a year code that repeats every 30 years.
+        //
+        // This was inverted, and then a "is the car more than 40 years old"
+        // heuristic was layered on top of the wrong branch. The canonical test
+        // VIN 1HGBH41JXMN109186 — a 1991 Honda, position 7 = "1" — decoded as
+        // 2021. Being confidently wrong about a lookup table is worse than not
+        // having the table, because it is the reason to reach for a tool
+        // rather than ask from memory.
+        //
+        // Scope, stated rather than implied: the standard binds passenger
+        // vehicles and light trucks (GVWR under 10,000 lb) sold in North
+        // America. Heavy vehicles and some non-NA manufacturers do not follow
+        // it, so a year here is a strong inference, not a guarantee.
+        return pos7.isNumber ? years[0] : years[1]
     }
     
     /// Decode the assembly plant from the VIN.
